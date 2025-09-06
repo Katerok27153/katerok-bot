@@ -13,5 +13,10 @@ def start(message):
 @bot.message_handler(commands=['help'])
 def help_cmd(message):
     bot.reply_to(message, "/start - начать\n/help - помощь")
+@bot.message_handler(commands=['about'])
+def help_cmd(message):
+    bot.reply_to(message, "/about - информация о боте")
+
+бот
 if __name__ == "__main__":
     bot.infinity_polling(skip_pending=True)
