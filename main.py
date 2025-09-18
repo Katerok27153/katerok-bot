@@ -12,11 +12,10 @@ def start(message):
     bot.reply_to(message, "Привет! Я твой первый бот! Напиши /help")
 @bot.message_handler(commands=['help'])
 def help_cmd(message):
-    bot.reply_to(message, "/start - начать\n/help - помощь")
+    bot.reply_to(message, "/start - начать\n/help - помощь\n/about - о боте")
 @bot.message_handler(commands=['about'])
-def help_cmd(message):
-    bot.reply_to(message, "/about - информация о боте")
+def about_cmd(message):
+    bot.reply_to(message, "Это бот, созданный с целью приобретения практических навыков по созданию Telegram бота\nАвтор: Верниковская Екатерина Андреевна\nВерсия: 1.0.1")
 
-бот
 if __name__ == "__main__":
     bot.infinity_polling(skip_pending=True)
