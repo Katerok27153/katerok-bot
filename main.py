@@ -25,7 +25,7 @@ def help_cmd(message):
     bot.reply_to(message, "/start - начать\n/help - помощь\n/about - о боте\n/sum - сумма чисел\n/hide - спрятать клавиатуру\n/weather - погода")
 @bot.message_handler(commands=['about'])
 def about_cmd(message):
-    bot.reply_to(message, "Это бот, созданный с целью приобретения практических навыков по созданию Telegram бота\nАвтор: Верниковская Екатерина Андреевна\nВерсия: 1.0.1")
+    bot.reply_to(message, "Это бот, созданный с целью приобретения практических навыков по созданию Telegram бота\nАвтор: Верниковская Екатерина Андреевна\nВерсия: 1.0.2")
 
 def is_int_token(t: str) -> bool:
     return t.strip().lstrip("-").isdigit()
