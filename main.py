@@ -22,10 +22,10 @@ def start(m: types.Message) -> None:
 
 @bot.message_handler(commands=['help'])
 def help_cmd(message):
-    bot.reply_to(message, "/start - начать\n/help - помощь\n/about - о боте\n/sum - сумма чисел\n/hide - спрятать клавиатуру\n/weather - погода")
+    bot.reply_to(message, "/start - начать\n/help - помощь\n/about - о боте\n/sum - сумма чисел\n/hide - спрятать клавиатуру\n/show - показать клавиатуру\n/weather - погода\n/max - максимум чисел\n/min - минимум чисел")
 @bot.message_handler(commands=['about'])
 def about_cmd(message):
-    bot.reply_to(message, "Это бот, созданный с целью приобретения практических навыков по созданию Telegram бота\nАвтор: Верниковская Екатерина Андреевна\nВерсия: 1.0.2")
+    bot.reply_to(message, "Это бот, созданный с целью приобретения практических навыков по созданию Telegram бота\nАвтор: Верниковская Екатерина Андреевна\nВерсия: 1.0.3")
 
 def is_int_token(t: str) -> bool:
     return t.strip().lstrip("-").isdigit()
@@ -52,14 +52,39 @@ def cmd_sum(m):
 
 def make_main_kb() -> types.ReplyKeyboardMarkup:
     kb = types.ReplyKeyboardMarkup(resize_keyboard=True)
-    kb.row("О боте", "Сумма")
+    kb.row("О боте", "Сумма", "Максимум", "Минимум")
     kb.row("/help")
     kb.row("/weather")
+    kb.row("Спрятать клавиатуру", "Показать клавиатуру")
     return kb
 
 @bot.message_handler(func=lambda m: m.text == "О боте")
 def kb_about(m):
     about_cmd(m)
+
+@bot.message_handler(func=lambda m: m.text == "Максимум")
+def kb_max(m):
+    bot.send_message(m.chat.id, "Введи числа через пробел или запятую:")
+    bot.register_next_step_handler(m, on_max_numbers)
+
+def on_max_numbers(m):
+    nums = parse_ints_from_text(m.text)
+    if not nums:
+        bot.reply_to(m, "Я не вижу чисел!!!!!! Пример: 2 3 10")
+    else:
+        bot.reply_to(m, f"Максимум: {max(nums)}")
+
+@bot.message_handler(func=lambda m: m.text == "Минимум")
+def kb_min(m):
+    bot.send_message(m.chat.id, "Введи числа через пробел или запятую:")
+    bot.register_next_step_handler(m, on_min_numbers)
+
+def on_min_numbers(m):
+    nums = parse_ints_from_text(m.text)
+    if not nums:
+        bot.reply_to(m, "Я не вижу чисел!!!!!! Пример: 2 3 10")
+    else:
+        bot.reply_to(m, f"Минимум: {min(nums)}")
 
 @bot.message_handler(func=lambda m: m.text == "Сумма")
 def kb_sum(m):
@@ -78,12 +103,28 @@ def hide_k(m):
     rm = types.ReplyKeyboardRemove()
     bot.send_message(m.chat.id, "Клавиатура спряталась",reply_markup=rm)
 
+@bot.message_handler(commands=["show"])
+def show_k(m):
+    bot.send_message(m.chat.id, "Клавиатура показана", reply_markup=make_main_kb())
+
+@bot.message_handler(func=lambda m: m.text == "Спрятать клавиатуру")
+def kb_hide(m):
+    hide_k(m)
+
+@bot.message_handler(func=lambda m: m.text == "Показать клавиатуру")
+def kb_show(m):
+    show_k(m)
+
 @bot.message_handler(commands=['confirm'])
 def confirm_cmd(m):
     kb = types.InlineKeyboardMarkup()
     kb.add(
         types.InlineKeyboardButton("ДАААА", callback_data="confirm:yes"),
         types.InlineKeyboardButton("НЕЕЕЕТ", callback_data="confirm:no"),
+        types.InlineKeyboardButton("Возможно", callback_data="confirm:maybe"),
+        types.InlineKeyboardButton("Позже", callback_data="confirm:later"),
+        types.InlineKeyboardButton("Нужна информация", callback_data="confirm:info"),
+        types.InlineKeyboardButton("Отмена", callback_data="confirm:cancel")
     )
     bot.send_message(m.chat.id, "Подтвердить действие????", reply_markup=kb)
 
@@ -93,21 +134,30 @@ def on_confirm(c):
     bot.answer_callback_query(c.id, "Принято!")
 
     bot.edit_message_reply_markup(c.message.chat.id, c.message.message_id, reply_markup=None)
-    bot.send_message(c.message.chat.id, "Готово!" if choice == "yes" else "Отменено")
+    responses = {
+        "yes": "Действие подтверждено! Выполняю...",
+        "no": "Действие отклонено!",
+        "maybe": "Понимаю, нужно подумать... Напишите, когда будете готовы.",
+        "later": "Хорошо, напомнить позже? Используйте команду /confirm когда будете готовы.",
+        "info": "Какую информацию вам предоставить? Напишите ваш вопрос.",
+        "cancel": "Действие отменено пользователем."
+    }
+    response_text = responses.get(choice, "Неизвестный выбор")
+    bot.send_message(c.message.chat.id, response_text)
 
 logging.basicConfig(
     level=logging.INFO,
     format="%(ascitime)s - %(levelname)s - %(message)s"
 )
 
-"""
+
 @bot.message_handler(commands=['sum'])
 def cmd_sum(m):
     logging.info(f"/sum от {m.from_user.first_name} {m.from_user.id}: {m.text}")
     nums = parse_ints_from_text(m.text)
     logging.info(f"распознаны числа: {nums}")
     bot.reply_to(m, f"Сумма: {sum(nums)}" if nums else "Пример: /sum 1 4 3")
-"""
+
 
 def fetch_weather_moscow_open_meteo() -> str:
     url = "https://api.open-meteo.com/v1/forecast"
@@ -128,6 +178,29 @@ def fetch_weather_moscow_open_meteo() -> str:
 @bot.message_handler(commands=['weather'])
 def weather_cmd(m):
     bot.reply_to(m, f"{fetch_weather_moscow_open_meteo()}" )
+
+
+@bot.message_handler(commands=['max'])
+def cmd_max(m):
+    logging.info(f"/max от {m.from_user.first_name} {m.from_user.id}: {m.text}")
+    nums = parse_ints_from_text(m.text)
+    logging.info(f"распознаны числа: {nums}")
+
+    if not nums:
+        bot.reply_to(m, "Ты должен написать числа: /max 2 3 10 или /max 2, -5, 6")
+    else:
+        bot.reply_to(m, f"Максимум: {max(nums)}")
+
+@bot.message_handler(commands=['min'])
+def cmd_min(m):
+    logging.info(f"/min от {m.from_user.first_name} {m.from_user.id}: {m.text}")
+    nums = parse_ints_from_text(m.text)
+    logging.info(f"распознаны числа: {nums}")
+
+    if not nums:
+        bot.reply_to(m, "Ты должен написать числа: /min 2 3 10 или /min 2, -5, 6")
+    else:
+        bot.reply_to(m, f"Минимум: {min(nums)}")
 
 if __name__ == "__main__":
     bot.infinity_polling(skip_pending=True)
