@@ -1,4 +1,6 @@
 import os
+import random
+
 from dotenv import load_dotenv
 import telebot
 import time
@@ -7,7 +9,7 @@ from datetime import datetime, timedelta
 from telebot import types
 
 from db import init_db, add_note, list_notes, update_note, delete_note, find_notes, list_models, get_active_model, \
-    set_active_model
+    set_active_model, get_user_character, list_characters, set_user_character, get_character_by_id
 from openrouter_client import chat_once, OpenRouterError
 
 # Загрузка переменных окружения
@@ -20,6 +22,42 @@ bot = telebot.TeleBot(TOKEN)
 
 # Инициализация базы данных при запуске
 init_db()
+
+
+def _build_messages(user_id: int, user_text: str) -> list[dict]:
+    p = get_user_character(user_id)
+    system = (
+        f"Ты отвечаешь строго в образе персонажа: {p['name']}.\n"
+        f"{p['prompt']}\n"
+        "Правила:\n"
+        "1) Всегда держи стиль и манеру речи выбранного персонажа. При необходимости - переформулируй.\n"
+        "2) Технические ответы давай корректно и по пунктам, но в характерной манере.\n"
+        "3) Не раскрывай, что ты 'играешь роль'.\n"
+        "4) Не используй длинный дословные цитаты из фильмов/книг (>10 слов).\n"
+        "5) Если стиль персонажа выражен слабо - переформулируй ответ и усили характер персонажа, сохраняя фактическую точность.\n"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_text},
+    ]
+
+
+def _build_messages_for_character(character: dict, user_text: str) -> list[dict]:
+    system = (
+        f"Ты отвечаешь строго в образе персонажа: {character['name']}.\n"
+        f"{character['prompt']}\n"
+        "Правила:\n"
+        "1) Всегда держи стиль и манеру речи выбранного персонажа. При необходимости - переформулируй.\n"
+        "2) Технические ответы давай корректно и по пунктам, но в характерной манере.\n"
+        "3) Не раскрывай, что ты 'играешь роль'.\n"
+        "4) Не используй длинный дословные цитаты из фильмов/книг (>10 слов).\n"
+        "5) Если стиль персонажа выражен слабо - переформулируй ответ и усили характер персонажа, сохраняя фактическую точность.\n"
+    )
+    return [
+        {"role": "system", "content": system},
+        {"role": "user", "content": user_text},
+    ]
+
 
 # Константы
 MAX_NOTES_PER_USER = 50
@@ -45,6 +83,9 @@ def help_cmd(message):
 /models - Показать доступные модели
 /model <id> - Выбрать активную модель
 /ask <вопрос> - Задать вопрос ИИ
+/characters 
+/character <id>
+/whoami
 
 📝 Лимит: {MAX_NOTES_PER_USER} заметок на пользователя
 """
@@ -369,17 +410,6 @@ def cmd_model(message: types.Message) -> None:
         bot.reply_to(message, "Неизвестный ID модели. Сначала /models")
 
 
-def _build_messages(user_id: int, user_text: str) -> list[dict]:
-    system = (
-        f"Ты отвечаешь кратко и по-существу.\n"
-        "Правила:\n"
-        "1) Технические ответы давай корректно и по пунктам.\n"
-    )
-    return [
-        {"role": "system", "content": system},
-        {"role": "user", "content": user_text},
-    ]
-
 
 @bot.message_handler(commands=["ask"])
 def cmd_ask(message: types.Message) -> None:
@@ -399,6 +429,77 @@ def cmd_ask(message: types.Message) -> None:
         bot.reply_to(message, f"Ошибка: {e}")
     except Exception:
         bot.reply_to(message, "Непредвиденная ошибка.")
+
+@bot.message_handler(commands=["characters"])
+def cmd_characters(message: types.Message) -> None:
+    user_id = message.from_user.id
+    items = list_characters()
+    if not items:
+        bot.reply_to(message, "Каталог персонажей пуст.")
+        return
+
+    try:
+        current = get_user_character(user_id)["id"]
+    except Exception:
+        current = None
+
+    lines = ["Дочтупные персонажи:"]
+    for p in items:
+        star = "*" if current is not None and p["id"] == current else " "
+        lines.append(f"{star} {p['id']}. {p['name']}")
+    lines.append("\nВыбор: /character <ID>")
+    bot.reply_to(message, "\n".join(lines))
+
+@bot.message_handler(commands=["character"])
+def cmd_character(message: types.Message) -> None:
+    user_id = message.from_user.id
+    arg = message.text.replace("/character", "", 1).strip()
+    if not arg:
+        p = get_user_character(user_id)
+        bot.reply_to(message, f"Текущий персонаж: {p['name']}\n(сменить: /characters, затем /character <ID>)")
+        return
+    if not arg.isdigit():
+        bot.reply_to(message, "Использование: /character <ID из /characters")
+        return
+    try:
+        p = set_user_character(user_id, int(arg))
+        bot.reply_to(message, f"Персонаж установлен: {p['name']}")
+    except ValueError:
+        bot.reply_to(message, "Неизвестный ID персонажа. Сначала /characters.")
+
+@bot.message_handler(commands=["whoami"])
+def cmd_whoami(message: types.Message) -> None:
+    character = get_user_character(message.from_user.id)
+    model = get_active_model()
+    bot.reply_to(message, f"Модель: {model['label']} [{model['key']}]\nПерсонаж: {character['name']}")
+
+@bot.message_handler(commands=["ask_random"])
+def cmd_ask_random(message: types.Message) -> None:
+    q = message.text.replace("/ask_random", "", 1).strip()
+    if not q:
+        bot.reply_to(message, "Использование: /ask_random <вопрос>")
+        return
+    q = q[:600]
+
+    items = list_characters()
+    if not items:
+        bot.reply_to(message, "Каталог персонажей пуст.")
+        return
+    chosen = random.choice(items)
+    character = get_character_by_id(chosen["id"])
+
+    msgs = _build_messages_for_character(character, q)
+    model_key = get_active_model()["key"]
+
+    try:
+        text, ms = chat_once(msgs, model=model_key, temperature=0.2, max_tokens=400)
+        out = (text or "").strip()[:4000]
+        bot.reply_to(message, f"{out}\n\n({ms} мс; модель; {model_key}; как: {character['name']})")
+    except OpenRouterError as e:
+        bot.reply_to(message, f"Ошибка: {e}")
+    except Exception:
+        bot.reply_to(message, "Непредвиденная ошибка")
+
 
 
 if __name__ == "__main__":
