@@ -9,7 +9,7 @@ from datetime import datetime, timedelta
 from telebot import types
 
 from db import init_db, add_note, list_notes, update_note, delete_note, find_notes, list_models, get_active_model, \
-    set_active_model, get_user_character, list_characters, set_user_character, get_character_by_id
+    set_active_model, get_user_character, list_characters, set_user_character, get_character_by_id, get_model_by_id
 from openrouter_client import chat_once, OpenRouterError
 
 # Загрузка переменных окружения
@@ -83,6 +83,7 @@ def help_cmd(message):
 /models - Показать доступные модели
 /model <id> - Выбрать активную модель
 /ask <вопрос> - Задать вопрос ИИ
+/ask_model <ID> <вопрос> - Задать вопрос другой модели без смены активной
 /characters 
 /character <id>
 /whoami
@@ -501,6 +502,52 @@ def cmd_ask_random(message: types.Message) -> None:
         bot.reply_to(message, "Непредвиденная ошибка")
 
 
+@bot.message_handler(commands=["ask_model"])
+def cmd_ask_model(message: types.Message) -> None:
+    parts = message.text.split(maxsplit=2)
+    if len(parts) < 3:
+        bot.reply_to(message, "Использование: /ask_model <ID модели> <вопрос>")
+        return
+
+    try:
+        model_id = int(parts[1])
+        question = parts[2].strip()
+    except ValueError:
+        bot.reply_to(message, "Ошибка: ID модели должен быть числом.")
+        return
+
+    if not question:
+        bot.reply_to(message, "Ошибка: Укажите вопрос.")
+        return
+
+    # Получаем модель по ID
+    try:
+        target_model = get_model_by_id(model_id)
+    except ValueError:
+        bot.reply_to(message, f"Ошибка: Модель с ID={model_id} не найдена. Сначала /models")
+        return
+
+    # Строим сообщения с текущим персонажем пользователя
+    msgs = _build_messages(message.from_user.id, question[:600])
+
+    try:
+        # Выполняем запрос к указанной модели
+        text, ms = chat_once(msgs, model=target_model["key"], temperature=0.2, max_tokens=400)
+        out = (text or "").strip()[:4000]
+
+        # Получаем активную модель для информации
+        active_model = get_active_model()
+
+        bot.reply_to(
+            message,
+            f"{out}\n\n"
+            f"({ms} мс; модель: {target_model['label']} [{target_model['key']}])\n"
+            f"Активная модель осталась: {active_model['label']}"
+        )
+    except OpenRouterError as e:
+        bot.reply_to(message, f"Ошибка: {e}")
+    except Exception:
+        bot.reply_to(message, "Непредвиденная ошибка.")
 
 if __name__ == "__main__":
     print("Бот запускается...")

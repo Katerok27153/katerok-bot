@@ -111,3 +111,4 @@ def list_due_users(today_str: str, hour: int) -> list[sqlite3.Row]:
 def mark_sent_today(user_id: int, today_str: str) -> None:
     with _connect() as conn:
         conn.execute("UPDATE users SET last_sent_date = ? WHERE user_id = ?", (today_str, user_id))
+

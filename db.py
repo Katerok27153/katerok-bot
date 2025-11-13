@@ -96,6 +96,14 @@ def get_active_model() -> dict:
         conn.execute("UPDATE models SET active=CASE WHEN id=? THEN 1 ELSE 0 END", (row["id"],))
         return {"id":row["id"], "key":row["key"], "label":row["label"], "active":True}
 
+def get_model_by_id(model_id: int) -> dict:
+    """Получить модель по ID"""
+    with _connect() as conn:
+        row = conn.execute("SELECT id, key, label FROM models WHERE id = ?", (model_id,)).fetchone()
+        if not row:
+            raise ValueError(f"Модель с ID {model_id} не найдена")
+        return {"id": row["id"], "key": row["key"], "label": row["label"]}
+
 def set_active_model(model_id: int) -> dict:
     with _connect() as conn:
         conn.execute("BEGIN IMMEDIATE")
